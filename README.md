@@ -1,3 +1,3 @@
 # AMi - An API Middleman.
 
-AMi is an **A**pi **Mi**ddleman written in Rust.
+AMi is an **A**PI **Mi**ddleman written in Rust.
