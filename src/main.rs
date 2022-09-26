@@ -1,50 +1,53 @@
-use std::fs;
-use std::io::prelude::*;
-use std::net::TcpListener;
-use std::net::TcpStream;
-use std::thread;
-use std::time::Duration;
+use std::convert::Infallible;
+use std::net::SocketAddr;
 
-use http::{Request, Response, StatusCode};
+use futures::{executor};
+// use futures::task::{Poll, Context};
 
-use ami::ThreadPool;
+use hyper::{Body, Request, Response, Server};
+use hyper::{Method, StatusCode};
+use hyper::server::conn::AddrStream;
+use hyper::service::{make_service_fn, service_fn};
 
-fn main() {
-    let listener = TcpListener::bind("127.0.00.1:7878").unwrap();
-    let pool = ThreadPool::new(4).unwrap();
+#[tokio::main]
+async fn main() {
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
-    for stream in listener.incoming().take(2) {
-        let stream = stream.unwrap();
+    let make_svc = make_service_fn(|_conn: &AddrStream| async {
+        Ok::<_, Infallible>(service_fn(handler))
+    });
 
-        pool.execute(|| {
-            handle_connection(stream);
-        });
+    let server = Server::bind(&addr).serve(make_svc);
+
+    if let Err(e) = server.await {
+        eprintln!("Server error: {}", e);
     }
-    println!("Shutting down!");
 }
 
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+async fn handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    let mut response = Response::new(Body::empty());
 
-    let get = b"GET / HTTP/1.1\r\n";
-    let sleep = b"GET /sleep HTTP/1.1\r\n";
+    match (req.method(), req.uri().path()) {
+        (&Method::GET, _) => {
+            *response.body_mut() = Body::from("This endpoint only supports POST requests");
+        }
+        (&Method::POST, _) => {
+            // Do HTTP proxy stuff here
+            if let Ok(r) = executor::block_on(proxy_request_from_body(req.body())) {
+                *response.body_mut() = r.into_body();
+            } else {
+                println!("Something went wrong!");
+            }
+        }
+        _ => {
+            *response.body_mut() = Body::from("Something went wrong");
+        }
+    }
 
-    let (status_line, filename) = if buffer.starts_with(get) {
-        ("HTTP/1.1 200 OK", "hello.html")
-    } else if buffer.starts_with(sleep) {
-        thread::sleep(Duration::from_secs(5));
-        ("HTTP/1.1 200 OK", "hello.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", "404.html")
-    };
+    Ok(response)
+}
 
-    let contents = fs::read_to_string(filename).unwrap();
-
-    let response = format!(
-        "{}\r\nContent-Length: {}\r\n\r\n{}",
-        status_line,
-        contents.len(),
-        contents
-    );
+async fn proxy_request_from_body(body: &Body) -> Result<Response<Body>, Infallible> {
+    // future::ready(Ok(Response::new(Body::from("TEST"))))
+    Ok(Response::new(Body::from("TEST")))
 }
