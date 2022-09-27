@@ -1,11 +1,12 @@
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
-use futures::{executor};
-// use futures::task::{Poll, Context};
+use futures::executor;
 
-use hyper::{Body, Request, Response, Server};
-use hyper::{Method, StatusCode};
+use serde::{Deserialize, Serialize};
+// use serde_json::Result;
+
+use hyper::{Body, Request, Response, Server, Method, StatusCode};
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 
@@ -33,7 +34,7 @@ async fn handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
         (&Method::POST, _) => {
             // Do HTTP proxy stuff here
-            if let Ok(r) = executor::block_on(proxy_request_from_body(req.body())) {
+            if let Ok(r) = executor::block_on(proxy_request_from_body(req)) {
                 *response.body_mut() = r.into_body();
             } else {
                 println!("Something went wrong!");
@@ -47,7 +48,32 @@ async fn handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     Ok(response)
 }
 
-async fn proxy_request_from_body(body: &Body) -> Result<Response<Body>, Infallible> {
-    // future::ready(Ok(Response::new(Body::from("TEST"))))
+#[derive(Debug, Serialize, Deserialize)]
+struct RequestData {
+    url: String,
+    payload: String,
+}
+
+async fn proxy_request_from_body(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    let rd: RequestData;
+    let s: String = "".to_string();
+
+    // Convert body into string
+    let bytes = hyper::body::to_bytes(req.into_body()).await;
+    // let bytes = executor::block_on(hyper::body::to_bytes(req.body())).unwrap();
+    let i = bytes.iter();
+    let s = String::from_utf8(i.collect()).expect("");
+
+    // Load JSON string into RequestData struct
+
+
+    match serde_json::from_str(&s) {
+        Ok(j) => { rd = j }
+        Err(e) => { eprintln!("Error: {}", e) }
+    }
+    // Make request for data
+    // Error handle responses
+    // Return Result
+
     Ok(Response::new(Body::from("TEST")))
 }
